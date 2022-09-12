@@ -410,6 +410,7 @@ class DiffusionPipeline(ConfigMixin):
             raise ValueError(
                 f"`self._progress_bar_config` should be of type `dict`, but is {type(self._progress_bar_config)}."
             )
+        return iterable
 
         return tqdm(iterable, **self._progress_bar_config)
 

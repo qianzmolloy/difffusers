@@ -215,6 +215,8 @@ class StableDiffusionPipeline(DiffusionPipeline):
             if latents.shape != latents_shape:
                 raise ValueError(f"Unexpected latents shape, got {latents.shape}, expected {latents_shape}")
         latents = latents.to(self.device)
+        # TODO
+        latents = latents.to(torch.float16)
 
         # set timesteps
         accepts_offset = "offset" in set(inspect.signature(self.scheduler.set_timesteps).parameters.keys())
@@ -237,7 +239,12 @@ class StableDiffusionPipeline(DiffusionPipeline):
         if accepts_eta:
             extra_step_kwargs["eta"] = eta
 
-        for i, t in enumerate(self.progress_bar(self.scheduler.timesteps)):
+        timesteps = torch.tensor([991, 969, 969, 947, 925, 903, 881, 859, 837, 815, 793, 771, 749, 727,
+        705, 683, 661, 639, 617, 595, 573, 551, 529, 507, 485, 463, 441, 419,
+        397, 375, 353, 331, 309, 287, 265, 243, 221, 199, 177, 155, 133, 111,
+        89,  67,  45,  23,   1], device='cuda:0').unsqueeze(-1)
+        # for i, t in enumerate(self.progress_bar(self.scheduler.timesteps)):
+        for i, t in enumerate(timesteps):
             # expand the latents if we are doing classifier free guidance
             latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
             if isinstance(self.scheduler, LMSDiscreteScheduler):
@@ -261,6 +268,9 @@ class StableDiffusionPipeline(DiffusionPipeline):
 
         # scale and decode the image latents with vae
         latents = 1 / 0.18215 * latents
+
+        # TODO 
+        latents = latents.to(torch.float16)
         image = self.vae.decode(latents).sample
 
         image = (image / 2 + 0.5).clamp(0, 1)
@@ -268,6 +278,8 @@ class StableDiffusionPipeline(DiffusionPipeline):
 
         # run safety checker
         safety_cheker_input = self.feature_extractor(self.numpy_to_pil(image), return_tensors="pt").to(self.device)
+        # TODO 
+        safety_cheker_input.pixel_values = safety_cheker_input.pixel_values.to(torch.float16)
         image, has_nsfw_concept = self.safety_checker(images=image, clip_input=safety_cheker_input.pixel_values)
 
         if output_type == "pil":

@@ -50,7 +50,7 @@ class SchedulerMixin:
         if tensor_format == "pt":
             for key, value in vars(self).items():
                 if isinstance(value, np.ndarray):
-                    setattr(self, key, torch.from_numpy(value))
+                    setattr(self, key, torch.from_numpy(value).to(device='cuda:0'))
 
         return self
 

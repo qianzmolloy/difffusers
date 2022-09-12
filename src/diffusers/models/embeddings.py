@@ -56,6 +56,7 @@ def get_timestep_embedding(
     # zero pad
     if embedding_dim % 2 == 1:
         emb = torch.nn.functional.pad(emb, (0, 1, 0, 0))
+    emb = emb.to(torch.float16)
     return emb
 
 

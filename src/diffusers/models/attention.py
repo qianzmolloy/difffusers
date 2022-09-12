@@ -243,9 +243,9 @@ class CrossAttention(nn.Module):
     def reshape_batch_dim_to_heads(self, tensor):
         batch_size, seq_len, dim = tensor.shape
         head_size = self.heads
-        tensor = tensor.reshape(batch_size // head_size, head_size, seq_len, dim)
-        tensor = tensor.permute(0, 2, 1, 3).reshape(batch_size // head_size, seq_len, dim * head_size)
-        return tensor
+        tensor2 = tensor.reshape(batch_size // head_size, head_size, seq_len, dim)
+        tensor3 = tensor2.permute(0, 2, 1, 3).reshape(batch_size // head_size, seq_len, dim * head_size)
+        return tensor3
 
     def forward(self, hidden_states, context=None, mask=None):
         batch_size, sequence_length, dim = hidden_states.shape
@@ -268,18 +268,26 @@ class CrossAttention(nn.Module):
 
     def _attention(self, query, key, value, sequence_length, dim):
         batch_size_attention = query.shape[0]
-        hidden_states = torch.zeros(
-            (batch_size_attention, sequence_length, dim // self.heads), device=query.device, dtype=query.dtype
-        )
-        slice_size = self._slice_size if self._slice_size is not None else hidden_states.shape[0]
-        for i in range(hidden_states.shape[0] // slice_size):
-            start_idx = i * slice_size
-            end_idx = (i + 1) * slice_size
-            attn_slice = torch.matmul(query[start_idx:end_idx], key[start_idx:end_idx].transpose(1, 2)) * self.scale
-            attn_slice = attn_slice.softmax(dim=-1)
-            attn_slice = torch.matmul(attn_slice, value[start_idx:end_idx])
+        # hidden_states = torch.zeros(
+        #     (batch_size_attention, sequence_length, dim // self.heads), device=query.device, dtype=query.dtype
+        # )
+        slice_size = self._slice_size if self._slice_size is not None else batch_size_attention
+        # for i in range(hidden_states.shape[0] // slice_size):
+            # start_idx = i * slice_size
+            # end_idx = (i + 1) * slice_size
+        # qslice = query[start_idx:end_idx]
+        qslice = query
+        # kslice = key[start_idx:end_idx].transpose(1, 2)
+        kslice = key.transpose(1, 2)
+        attn_slice = torch.matmul(qslice, kslice) * self.scale
+        attn_slice = attn_slice.softmax(dim=-1)
+        # vslice = value[start_idx:end_idx]
+        vslice = value
+        hidden_states = torch.matmul(attn_slice, vslice)
 
-            hidden_states[start_idx:end_idx] = attn_slice
+
+        # hidden_states = torch.cat(attn_slices, dim=0)
+
 
         # reshape hidden_states
         hidden_states = self.reshape_batch_dim_to_heads(hidden_states)
