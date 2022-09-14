@@ -233,19 +233,7 @@ class CrossAttention(nn.Module):
 
         self.to_out = nn.Sequential(nn.Linear(inner_dim, query_dim), nn.Dropout(dropout))
 
-    def reshape_heads_to_batch_dim(self, tensor):
-        batch_size, seq_len, dim = tensor.shape
-        head_size = self.heads
-        tensor = tensor.reshape(batch_size, seq_len, head_size, dim // head_size)
-        tensor = tensor.permute(0, 2, 1, 3).reshape(batch_size * head_size, seq_len, dim // head_size)
-        return tensor
 
-    def reshape_batch_dim_to_heads(self, tensor):
-        batch_size, seq_len, dim = tensor.shape
-        head_size = self.heads
-        tensor2 = tensor.reshape(batch_size // head_size, head_size, seq_len, dim)
-        tensor3 = tensor2.permute(0, 2, 1, 3).reshape(batch_size // head_size, seq_len, dim * head_size)
-        return tensor3
 
     def forward(self, hidden_states, context=None, mask=None):
         batch_size, sequence_length, dim = hidden_states.shape
@@ -255,49 +243,57 @@ class CrossAttention(nn.Module):
         key = self.to_k(context)
         value = self.to_v(context)
 
-        query = self.reshape_heads_to_batch_dim(query)
-        key = self.reshape_heads_to_batch_dim(key)
-        value = self.reshape_heads_to_batch_dim(value)
 
         # TODO(PVP) - mask is currently never used. Remember to re-implement when used
 
         # attention, what we cannot get enough of
-        hidden_states = self._attention(query, key, value, sequence_length, dim)
+        hidden_states = attention(query, key, value, sequence_length, dim, self.scale, self.heads)
 
         return self.to_out(hidden_states)
 
-    def _load_from_state_dict(self, *args, **kwargs):
-        super()._load_from_state_dict(*args, **kwargs)
-        # XXX: this removes `* self.scale` from attention and shaves of a lot of kernels.
-        self.to_q.weight = nn.Parameter(self.to_q.weight.detach(), requires_grad=False)
-        self.to_q.weight *= self.scale
+def reshape_heads_to_batch_dim(tensor, head_size):
+    batch_size, seq_len, dim = tensor.shape
+    tensor = tensor.reshape(batch_size, seq_len, head_size, dim // head_size)
+    tensor = tensor.permute(0, 2, 1, 3).reshape(batch_size * head_size, seq_len, dim // head_size)
+    return tensor
 
-    def _attention(self, query, key, value, sequence_length, dim):
-        batch_size_attention = query.shape[0]
-        # hidden_states = torch.zeros(
-        #     (batch_size_attention, sequence_length, dim // self.heads), device=query.device, dtype=query.dtype
-        # )
-        slice_size = self._slice_size if self._slice_size is not None else batch_size_attention
-        # for i in range(hidden_states.shape[0] // slice_size):
-            # start_idx = i * slice_size
-            # end_idx = (i + 1) * slice_size
-        # qslice = query[start_idx:end_idx]
-        qslice = query
-        # kslice = key[start_idx:end_idx].transpose(1, 2)
-        kslice = key.transpose(1, 2)
-        attn_slice = torch.matmul(qslice, kslice)
-        attn_slice = attn_slice.softmax(dim=-1)
-        # vslice = value[start_idx:end_idx]
-        vslice = value
-        hidden_states = torch.matmul(attn_slice, vslice)
+def reshape_batch_dim_to_heads(tensor, head_size):
+    batch_size, seq_len, dim = tensor.shape
+    tensor2 = tensor.reshape(batch_size // head_size, head_size, seq_len, dim)
+    tensor3 = tensor2.permute(0, 2, 1, 3).reshape(batch_size // head_size, seq_len, dim * head_size)
+    return tensor3
+
+@torch.jit.script
+def attention(query, key, value, sequence_length, dim, scale, head_size):
+    query = reshape_heads_to_batch_dim(query, head_size)
+    key = reshape_heads_to_batch_dim(key, head_size)
+    value = reshape_heads_to_batch_dim(value, head_size)
+
+    batch_size_attention = query.shape[0]
+    # hidden_states = torch.zeros(
+    #     (batch_size_attention, sequence_length, dim // self.heads), device=query.device, dtype=query.dtype
+    # )
+    slice_size = batch_size_attention
+    # for i in range(hidden_states.shape[0] // slice_size):
+        # start_idx = i * slice_size
+        # end_idx = (i + 1) * slice_size
+    # qslice = query[start_idx:end_idx]
+    qslice = query
+    # kslice = key[start_idx:end_idx].transpose(1, 2)
+    kslice = key.transpose(1, 2)
+    attn_slice = torch.matmul(qslice, kslice) * scale
+    attn_slice = attn_slice.softmax(dim=-1)
+    # vslice = value[start_idx:end_idx]
+    vslice = value
+    hidden_states = torch.matmul(attn_slice, vslice)
 
 
-        # hidden_states = torch.cat(attn_slices, dim=0)
+    # hidden_states = torch.cat(attn_slices, dim=0)
 
 
-        # reshape hidden_states
-        hidden_states = self.reshape_batch_dim_to_heads(hidden_states)
-        return hidden_states
+    # reshape hidden_states
+    hidden_states = reshape_batch_dim_to_heads(hidden_states, head_size)
+    return hidden_states
 
 
 class FeedForward(nn.Module):
