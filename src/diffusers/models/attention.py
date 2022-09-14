@@ -266,6 +266,12 @@ class CrossAttention(nn.Module):
 
         return self.to_out(hidden_states)
 
+    def _load_from_state_dict(self, *args, **kwargs):
+        super()._load_from_state_dict(*args, **kwargs)
+        # XXX: this removes `* self.scale` from attention and shaves of a lot of kernels.
+        self.to_q.weight = nn.Parameter(self.to_q.weight.detach(), requires_grad=False)
+        self.to_q.weight *= self.scale
+
     def _attention(self, query, key, value, sequence_length, dim):
         batch_size_attention = query.shape[0]
         # hidden_states = torch.zeros(
@@ -279,7 +285,7 @@ class CrossAttention(nn.Module):
         qslice = query
         # kslice = key[start_idx:end_idx].transpose(1, 2)
         kslice = key.transpose(1, 2)
-        attn_slice = torch.matmul(qslice, kslice) * self.scale
+        attn_slice = torch.matmul(qslice, kslice)
         attn_slice = attn_slice.softmax(dim=-1)
         # vslice = value[start_idx:end_idx]
         vslice = value
