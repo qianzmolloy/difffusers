@@ -1,4 +1,5 @@
 from functools import partial
+from typing import Optional
 
 import numpy as np
 import torch
@@ -256,7 +257,7 @@ class ResnetBlock2D(nn.Module):
         out_channels=None,
         conv_shortcut=False,
         dropout=0.0,
-        temb_channels=512,
+        temb_channels: Optional[int]=512,
         groups=32,
         groups_out=None,
         pre_norm=True,
@@ -287,7 +288,6 @@ class ResnetBlock2D(nn.Module):
         self.norm1 = torch.nn.GroupNorm(num_groups=groups, num_channels=in_channels, eps=eps, affine=True)
 
         self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
-
         if temb_channels is not None:
             self.time_emb_proj = torch.nn.Linear(temb_channels, out_channels)
         else:
@@ -328,7 +328,7 @@ class ResnetBlock2D(nn.Module):
         if self.use_nin_shortcut:
             self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, x, temb):
+    def forward(self, x, temb: Optional[torch.Tensor]):
         hidden_states = x
 
         hidden_states = self.norm1(hidden_states)
