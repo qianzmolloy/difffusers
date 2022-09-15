@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 
+from typing import List, Optional
+
 import numpy as np
 
 # limitations under the License.
@@ -61,17 +63,19 @@ def get_down_block(
     elif down_block_type == "CrossAttnDownBlock2D":
         if cross_attention_dim is None:
             raise ValueError("cross_attention_dim must be specified for CrossAttnDownBlock2D")
-        return CrossAttnDownBlock2D(
-            num_layers=num_layers,
-            in_channels=in_channels,
-            out_channels=out_channels,
-            temb_channels=temb_channels,
-            add_downsample=add_downsample,
-            resnet_eps=resnet_eps,
-            resnet_act_fn=resnet_act_fn,
-            downsample_padding=downsample_padding,
-            cross_attention_dim=cross_attention_dim,
-            attn_num_head_channels=attn_num_head_channels,
+        return torch.jit.script(
+            CrossAttnDownBlock2D(
+                num_layers=num_layers,
+                in_channels=in_channels,
+                out_channels=out_channels,
+                temb_channels=temb_channels,
+                add_downsample=add_downsample,
+                resnet_eps=resnet_eps,
+                resnet_act_fn=resnet_act_fn,
+                downsample_padding=downsample_padding,
+                cross_attention_dim=cross_attention_dim,
+                attn_num_head_channels=attn_num_head_channels,
+            )
         )
     elif down_block_type == "SkipDownBlock2D":
         return SkipDownBlock2D(
@@ -136,17 +140,19 @@ def get_up_block(
     elif up_block_type == "CrossAttnUpBlock2D":
         if cross_attention_dim is None:
             raise ValueError("cross_attention_dim must be specified for CrossAttnUpBlock2D")
-        return CrossAttnUpBlock2D(
-            num_layers=num_layers,
-            in_channels=in_channels,
-            out_channels=out_channels,
-            prev_output_channel=prev_output_channel,
-            temb_channels=temb_channels,
-            add_upsample=add_upsample,
-            resnet_eps=resnet_eps,
-            resnet_act_fn=resnet_act_fn,
-            cross_attention_dim=cross_attention_dim,
-            attn_num_head_channels=attn_num_head_channels,
+        return torch.jit.script(
+            CrossAttnUpBlock2D(
+                num_layers=num_layers,
+                in_channels=in_channels,
+                out_channels=out_channels,
+                prev_output_channel=prev_output_channel,
+                temb_channels=temb_channels,
+                add_upsample=add_upsample,
+                resnet_eps=resnet_eps,
+                resnet_act_fn=resnet_act_fn,
+                cross_attention_dim=cross_attention_dim,
+                attn_num_head_channels=attn_num_head_channels,
+            )
         )
     elif up_block_type == "AttnUpBlock2D":
         return AttnUpBlock2D(
@@ -300,18 +306,20 @@ class UNetMidBlock2DCrossAttn(nn.Module):
 
         # there is always at least one resnet
         resnets = [
-            torch.jit.script(ResnetBlock2D(
-                in_channels=in_channels,
-                out_channels=in_channels,
-                temb_channels=temb_channels,
-                eps=resnet_eps,
-                groups=resnet_groups,
-                dropout=dropout,
-                time_embedding_norm=resnet_time_scale_shift,
-                non_linearity=resnet_act_fn,
-                output_scale_factor=output_scale_factor,
-                pre_norm=resnet_pre_norm,
-            ))
+            torch.jit.script(
+                ResnetBlock2D(
+                    in_channels=in_channels,
+                    out_channels=in_channels,
+                    temb_channels=temb_channels,
+                    eps=resnet_eps,
+                    groups=resnet_groups,
+                    dropout=dropout,
+                    time_embedding_norm=resnet_time_scale_shift,
+                    non_linearity=resnet_act_fn,
+                    output_scale_factor=output_scale_factor,
+                    pre_norm=resnet_pre_norm,
+                )
+            )
         ]
         attentions = []
 
@@ -326,18 +334,20 @@ class UNetMidBlock2DCrossAttn(nn.Module):
                 )
             )
             resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=in_channels,
-                    out_channels=in_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=resnet_groups,
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=in_channels,
+                        out_channels=in_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=resnet_groups,
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
 
         self.attentions = nn.ModuleList(attentions)
@@ -395,18 +405,20 @@ class AttnDownBlock2D(nn.Module):
         for i in range(num_layers):
             in_channels = in_channels if i == 0 else out_channels
             resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=resnet_groups,
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=in_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=resnet_groups,
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
             attentions.append(
                 AttentionBlock(
@@ -478,26 +490,30 @@ class CrossAttnDownBlock2D(nn.Module):
         for i in range(num_layers):
             in_channels = in_channels if i == 0 else out_channels
             resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=resnet_groups,
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=in_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=resnet_groups,
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
             attentions.append(
-                SpatialTransformer(
-                    out_channels,
-                    attn_num_head_channels,
-                    out_channels // attn_num_head_channels,
-                    depth=1,
-                    context_dim=cross_attention_dim,
+                torch.jit.script(
+                    SpatialTransformer(
+                        out_channels,
+                        attn_num_head_channels,
+                        out_channels // attn_num_head_channels,
+                        depth=1,
+                        context_dim=cross_attention_dim,
+                    )
                 )
             )
         self.attentions = nn.ModuleList(attentions)
@@ -530,18 +546,18 @@ class CrossAttnDownBlock2D(nn.Module):
             attn._set_attention_slice(slice_size)
 
     def forward(self, hidden_states, temb=None, encoder_hidden_states=None):
-        output_states = ()
+        output_states = []
 
         for resnet, attn in zip(self.resnets, self.attentions):
             hidden_states = resnet(hidden_states, temb)
             hidden_states = attn(hidden_states, context=encoder_hidden_states)
-            output_states += (hidden_states,)
+            output_states.append(hidden_states)
 
         if self.downsamplers is not None:
             for downsampler in self.downsamplers:
                 hidden_states = downsampler(hidden_states)
 
-            output_states += (hidden_states,)
+            output_states.append(hidden_states)
 
         return hidden_states, output_states
 
@@ -569,18 +585,20 @@ class DownBlock2D(nn.Module):
         for i in range(num_layers):
             in_channels = in_channels if i == 0 else out_channels
             resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=resnet_groups,
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=in_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=resnet_groups,
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
 
         self.resnets = nn.ModuleList(resnets)
@@ -772,19 +790,21 @@ class AttnSkipDownBlock2D(nn.Module):
         for i in range(num_layers):
             in_channels = in_channels if i == 0 else out_channels
             self.resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=min(in_channels // 4, 32),
-                    groups_out=min(out_channels // 4, 32),
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=in_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=min(in_channels // 4, 32),
+                        groups_out=min(out_channels // 4, 32),
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
             self.attentions.append(
                 AttentionBlock(
@@ -860,19 +880,21 @@ class SkipDownBlock2D(nn.Module):
         for i in range(num_layers):
             in_channels = in_channels if i == 0 else out_channels
             self.resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=min(in_channels // 4, 32),
-                    groups_out=min(out_channels // 4, 32),
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=in_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=min(in_channels // 4, 32),
+                        groups_out=min(out_channels // 4, 32),
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
 
         if add_downsample:
@@ -947,18 +969,20 @@ class AttnUpBlock2D(nn.Module):
             resnet_in_channels = prev_output_channel if i == 0 else out_channels
 
             resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=resnet_in_channels + res_skip_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=resnet_groups,
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=resnet_in_channels + res_skip_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=resnet_groups,
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
             attentions.append(
                 AttentionBlock(
@@ -1027,26 +1051,30 @@ class CrossAttnUpBlock2D(nn.Module):
             resnet_in_channels = prev_output_channel if i == 0 else out_channels
 
             resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=resnet_in_channels + res_skip_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=resnet_groups,
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=resnet_in_channels + res_skip_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=resnet_groups,
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
             attentions.append(
-                SpatialTransformer(
-                    out_channels,
-                    attn_num_head_channels,
-                    out_channels // attn_num_head_channels,
-                    depth=1,
-                    context_dim=cross_attention_dim,
+                torch.jit.script(
+                    SpatialTransformer(
+                        out_channels,
+                        attn_num_head_channels,
+                        out_channels // attn_num_head_channels,
+                        depth=1,
+                        context_dim=cross_attention_dim,
+                    )
                 )
             )
         self.attentions = nn.ModuleList(attentions)
@@ -1072,7 +1100,13 @@ class CrossAttnUpBlock2D(nn.Module):
         for attn in self.attentions:
             attn._set_attention_slice(slice_size)
 
-    def forward(self, hidden_states, res_hidden_states_tuple, temb=None, encoder_hidden_states=None):
+    def forward(
+        self,
+        hidden_states,
+        res_hidden_states_tuple: List[torch.Tensor],
+        temb: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+    ):
         for resnet, attn in zip(self.resnets, self.attentions):
             # pop res hidden states
             res_hidden_states = res_hidden_states_tuple[-1]
@@ -1114,18 +1148,20 @@ class UpBlock2D(nn.Module):
             resnet_in_channels = prev_output_channel if i == 0 else out_channels
 
             resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=resnet_in_channels + res_skip_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=resnet_groups,
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=resnet_in_channels + res_skip_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=resnet_groups,
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
 
         self.resnets = nn.ModuleList(resnets)
@@ -1302,19 +1338,21 @@ class AttnSkipUpBlock2D(nn.Module):
             resnet_in_channels = prev_output_channel if i == 0 else out_channels
 
             self.resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=resnet_in_channels + res_skip_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=min(resnet_in_channels + res_skip_channels // 4, 32),
-                    groups_out=min(out_channels // 4, 32),
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=resnet_in_channels + res_skip_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=min(resnet_in_channels + res_skip_channels // 4, 32),
+                        groups_out=min(out_channels // 4, 32),
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
 
         self.attentions.append(
@@ -1408,19 +1446,21 @@ class SkipUpBlock2D(nn.Module):
             resnet_in_channels = prev_output_channel if i == 0 else out_channels
 
             self.resnets.append(
-                torch.jit.script(ResnetBlock2D(
-                    in_channels=resnet_in_channels + res_skip_channels,
-                    out_channels=out_channels,
-                    temb_channels=temb_channels,
-                    eps=resnet_eps,
-                    groups=min((resnet_in_channels + res_skip_channels) // 4, 32),
-                    groups_out=min(out_channels // 4, 32),
-                    dropout=dropout,
-                    time_embedding_norm=resnet_time_scale_shift,
-                    non_linearity=resnet_act_fn,
-                    output_scale_factor=output_scale_factor,
-                    pre_norm=resnet_pre_norm,
-                ))
+                torch.jit.script(
+                    ResnetBlock2D(
+                        in_channels=resnet_in_channels + res_skip_channels,
+                        out_channels=out_channels,
+                        temb_channels=temb_channels,
+                        eps=resnet_eps,
+                        groups=min((resnet_in_channels + res_skip_channels) // 4, 32),
+                        groups_out=min(out_channels // 4, 32),
+                        dropout=dropout,
+                        time_embedding_norm=resnet_time_scale_shift,
+                        non_linearity=resnet_act_fn,
+                        output_scale_factor=output_scale_factor,
+                        pre_norm=resnet_pre_norm,
+                    )
+                )
             )
 
         self.upsampler = FirUpsample2D(in_channels, out_channels=out_channels)

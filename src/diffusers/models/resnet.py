@@ -31,10 +31,7 @@ class Upsample2D(nn.Module):
             conv = nn.Conv2d(self.channels, self.out_channels, 3, padding=1)
 
         # TODO(Suraj, Patrick) - clean up after weight dicts are correctly renamed
-        if name == "conv":
-            self.conv = conv
-        else:
-            self.Conv2d_0 = conv
+        self.conv = conv
 
     def forward(self, x):
         assert x.shape[1] == self.channels
@@ -45,10 +42,7 @@ class Upsample2D(nn.Module):
 
         # TODO(Suraj, Patrick) - clean up after weight dicts are correctly renamed
         if self.use_conv:
-            if self.name == "conv":
-                x = self.conv(x)
-            else:
-                x = self.Conv2d_0(x)
+            x = self.conv(x)
 
         return x
 
@@ -78,19 +72,13 @@ class Downsample2D(nn.Module):
             conv = nn.AvgPool2d(kernel_size=stride, stride=stride)
 
         # TODO(Suraj, Patrick) - clean up after weight dicts are correctly renamed
-        if name == "conv":
-            self.Conv2d_0 = conv
-            self.conv = conv
-        elif name == "Conv2d_0":
-            self.conv = conv
-        else:
-            self.conv = conv
+        self.conv = conv
 
     def forward(self, x):
         assert x.shape[1] == self.channels
         if self.use_conv and self.padding == 0:
             pad = (0, 1, 0, 1)
-            x = F.pad(x, pad, mode="constant", value=0)
+            x = F.pad(x, pad, mode="constant", value=0.0)
 
         assert x.shape[1] == self.channels
         x = self.conv(x)
@@ -257,7 +245,7 @@ class ResnetBlock2D(nn.Module):
         out_channels=None,
         conv_shortcut=False,
         dropout=0.0,
-        temb_channels: Optional[int]=512,
+        temb_channels: Optional[int] = 512,
         groups=32,
         groups_out=None,
         pre_norm=True,

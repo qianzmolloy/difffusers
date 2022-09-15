@@ -137,7 +137,7 @@ class SpatialTransformer(nn.Module):
         for block in self.transformer_blocks:
             block._set_attention_slice(slice_size)
 
-    def forward(self, hidden_states, context=None):
+    def forward(self, hidden_states: torch.Tensor, context: Optional[torch.Tensor] = None):
         # note: if no context is given, cross-attention defaults to self-attention
         batch, channel, height, weight = hidden_states.shape
         residual = hidden_states
@@ -192,7 +192,7 @@ class BasicTransformerBlock(nn.Module):
         self.attn1._slice_size = slice_size
         self.attn2._slice_size = slice_size
 
-    def forward(self, hidden_states, context=None):
+    def forward(self, hidden_states: torch.Tensor, context: Optional[torch.Tensor] = None):
         hidden_states = hidden_states.contiguous() if hidden_states.device.type == "mps" else hidden_states
         hidden_states = self.attn1(self.norm1(hidden_states)) + hidden_states
         hidden_states = self.attn2(self.norm2(hidden_states), context=context) + hidden_states
@@ -233,16 +233,15 @@ class CrossAttention(nn.Module):
 
         self.to_out = nn.Sequential(nn.Linear(inner_dim, query_dim), nn.Dropout(dropout))
 
-
-
-    def forward(self, hidden_states, context=None, mask=None):
+    def forward(
+        self, hidden_states: torch.Tensor, context: Optional[torch.Tensor] = None, mask: Optional[torch.Tensor] = None
+    ):
         batch_size, sequence_length, dim = hidden_states.shape
 
         query = self.to_q(hidden_states)
         context = context if context is not None else hidden_states
         key = self.to_k(context)
         value = self.to_v(context)
-
 
         # TODO(PVP) - mask is currently never used. Remember to re-implement when used
 
@@ -251,45 +250,39 @@ class CrossAttention(nn.Module):
 
         return self.to_out(hidden_states)
 
-def reshape_heads_to_batch_dim(tensor, head_size):
+
+def reshape_heads_to_batch_dim(tensor: torch.Tensor, head_size: int):
     batch_size, seq_len, dim = tensor.shape
     tensor = tensor.reshape(batch_size, seq_len, head_size, dim // head_size)
     tensor = tensor.permute(0, 2, 1, 3).reshape(batch_size * head_size, seq_len, dim // head_size)
     return tensor
 
-def reshape_batch_dim_to_heads(tensor, head_size):
+
+def reshape_batch_dim_to_heads(tensor: torch.Tensor, head_size: int):
     batch_size, seq_len, dim = tensor.shape
     tensor2 = tensor.reshape(batch_size // head_size, head_size, seq_len, dim)
     tensor3 = tensor2.permute(0, 2, 1, 3).reshape(batch_size // head_size, seq_len, dim * head_size)
     return tensor3
 
-@torch.jit.script
-def attention(query, key, value, sequence_length, dim, scale, head_size):
+
+def attention(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    sequence_length: int,
+    dim: int,
+    scale: float,
+    head_size: int,
+):
     query = reshape_heads_to_batch_dim(query, head_size)
     key = reshape_heads_to_batch_dim(key, head_size)
     value = reshape_heads_to_batch_dim(value, head_size)
-
-    batch_size_attention = query.shape[0]
-    # hidden_states = torch.zeros(
-    #     (batch_size_attention, sequence_length, dim // self.heads), device=query.device, dtype=query.dtype
-    # )
-    slice_size = batch_size_attention
-    # for i in range(hidden_states.shape[0] // slice_size):
-        # start_idx = i * slice_size
-        # end_idx = (i + 1) * slice_size
-    # qslice = query[start_idx:end_idx]
     qslice = query
-    # kslice = key[start_idx:end_idx].transpose(1, 2)
     kslice = key.transpose(1, 2)
     attn_slice = torch.matmul(qslice, kslice) * scale
     attn_slice = attn_slice.softmax(dim=-1)
-    # vslice = value[start_idx:end_idx]
     vslice = value
     hidden_states = torch.matmul(attn_slice, vslice)
-
-
-    # hidden_states = torch.cat(attn_slices, dim=0)
-
 
     # reshape hidden_states
     hidden_states = reshape_batch_dim_to_heads(hidden_states, head_size)
@@ -318,7 +311,7 @@ class FeedForward(nn.Module):
 
         self.net = nn.Sequential(project_in, nn.Dropout(dropout), nn.Linear(inner_dim, dim_out))
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         return self.net(hidden_states)
 
 
@@ -336,6 +329,6 @@ class GEGLU(nn.Module):
         super().__init__()
         self.proj = nn.Linear(dim_in, dim_out * 2)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
         hidden_states, gate = self.proj(hidden_states).chunk(2, dim=-1)
         return hidden_states * F.gelu(gate)
