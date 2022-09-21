@@ -188,7 +188,7 @@ class FlaxDDPMScheduler(SchedulerMixin, ConfigMixin):
         model_output: jnp.ndarray,
         timestep: int,
         sample: jnp.ndarray,
-        key: random.KeyArray,
+        key: random.PRNGKey,
         predict_epsilon: bool = True,
         return_dict: bool = True,
     ) -> Union[FlaxSchedulerOutput, Tuple]:

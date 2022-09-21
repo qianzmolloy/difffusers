@@ -154,7 +154,7 @@ class FlaxScoreSdeVeScheduler(SchedulerMixin, ConfigMixin):
         model_output: jnp.ndarray,
         timestep: int,
         sample: jnp.ndarray,
-        key: random.KeyArray,
+        key: random.PRNGKey,
         return_dict: bool = True,
     ) -> Union[FlaxSdeVeOutput, Tuple]:
         """
@@ -214,7 +214,7 @@ class FlaxScoreSdeVeScheduler(SchedulerMixin, ConfigMixin):
         state: ScoreSdeVeSchedulerState,
         model_output: jnp.ndarray,
         sample: jnp.ndarray,
-        key: random.KeyArray,
+        key: random.PRNGKey,
         return_dict: bool = True,
     ) -> Union[SchedulerOutput, Tuple]:
         """
