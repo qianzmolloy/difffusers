@@ -23,6 +23,7 @@ import flax
 import jax.numpy as jnp
 
 from ..configuration_utils import ConfigMixin, register_to_config
+from ..utils import BaseOutput
 from .scheduling_utils import SchedulerMixin, SchedulerOutput
 
 
@@ -68,8 +69,9 @@ class DDIMSchedulerState:
 
 
 @flax.struct.dataclass
-class FlaxSchedulerOutput(SchedulerOutput):
+class FlaxSchedulerOutput(BaseOutput):
     state: DDIMSchedulerState
+    prev_sample: jnp.ndarray
 
 
 class FlaxDDIMScheduler(SchedulerMixin, ConfigMixin):
