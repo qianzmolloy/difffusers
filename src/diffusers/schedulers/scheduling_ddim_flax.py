@@ -114,7 +114,6 @@ class FlaxDDIMScheduler(SchedulerMixin, ConfigMixin):
         beta_start: float = 0.0001,
         beta_end: float = 0.02,
         beta_schedule: str = "linear",
-        set_alpha_to_one: bool = True,
         steps_offset: int = 0,
     ):
         if beta_schedule == "linear":
@@ -137,7 +136,6 @@ class FlaxDDIMScheduler(SchedulerMixin, ConfigMixin):
         # For the final step, there is no previous alphas_cumprod because we are already at 0
         # `set_alpha_to_one` decides whether we set this parameter simply to one or
         # whether we use the final alpha of the "non-previous" one.
-        self.final_alpha_cumprod = jnp.array(1.0) if set_alpha_to_one else self._alphas_cumprod[0]
 
     def create_state(self):
         return DDIMSchedulerState.create(
@@ -146,7 +144,7 @@ class FlaxDDIMScheduler(SchedulerMixin, ConfigMixin):
 
     def _get_variance(self, timestep, prev_timestep, alphas_cumprod):
         alpha_prod_t = alphas_cumprod[timestep]
-        alpha_prod_t_prev = jnp.where(prev_timestep >= 0, alphas_cumprod[prev_timestep], self.final_alpha_cumprod)
+        alpha_prod_t_prev = alphas_cumprod[prev_timestep]
         beta_prod_t = 1 - alpha_prod_t
         beta_prod_t_prev = 1 - alpha_prod_t_prev
 
@@ -223,12 +221,13 @@ class FlaxDDIMScheduler(SchedulerMixin, ConfigMixin):
 
         # 1. get previous step value (=t-1)
         prev_timestep = timestep - self.config.num_train_timesteps // state.num_inference_steps
+        prev_timestep = jnp.clip(prev_timestep, 0)
 
         alphas_cumprod = state.alphas_cumprod
 
         # 2. compute alphas, betas
         alpha_prod_t = alphas_cumprod[timestep]
-        alpha_prod_t_prev = jnp.where(prev_timestep >= 0, alphas_cumprod[prev_timestep], self.final_alpha_cumprod)
+        alpha_prod_t_prev = alphas_cumprod[prev_timestep]
 
         beta_prod_t = 1 - alpha_prod_t
 
