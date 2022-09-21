@@ -136,7 +136,7 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
             raise ValueError(f"`height` and `width` have to be divisible by 8 but are {height} and {width}.")
 
         # get prompt text embeddings
-        text_embeddings = self.text_encoder(prompt_ids, params=params["text_encoder"])[0]
+        text_embeddings = self.text_encoder(prompt_ids, params=params["text_encoder"], return_dict=False)[0]
 
         # TODO: currently it is assumed `do_classifier_free_guidance = guidance_scale > 1.0`
         # implement this conditional `do_classifier_free_guidance = guidance_scale > 1.0`
@@ -146,7 +146,7 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
         uncond_input = self.tokenizer(
             [""] * batch_size, padding="max_length", max_length=max_length, return_tensors="np"
         )
-        uncond_embeddings = self.text_encoder(uncond_input.input_ids, params=params["text_encoder"])[0]
+        uncond_embeddings = self.text_encoder(uncond_input.input_ids, params=params["text_encoder"], return_dict=False)[0]
         context = jnp.concatenate([uncond_embeddings, text_embeddings])
 
         # TODO: check it because the shape is different from Pytorhc StableDiffusionPipeline
@@ -200,7 +200,7 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
         # scale and decode the image latents with vae
         latents = 1 / 0.18215 * latents
         # TODO: check when flax vae gets merged into main
-        image = self.vae.apply({"params": params["vae"]}, latents, method=self.vae.decode).sample
+        image = self.vae.apply({"params": params["vae"]}, latents, method=self.vae.decode, return_dict=False)[0]
 
         image = (image / 2 + 0.5).clip(0, 1).transpose(0, 2, 3, 1)
 
