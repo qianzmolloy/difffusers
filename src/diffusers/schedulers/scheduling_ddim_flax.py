@@ -67,7 +67,7 @@ class DDIMSchedulerState:
         return cls(timesteps=jnp.arange(0, num_train_timesteps)[::-1], alphas_cumprod=alphas_cumprod)
 
 
-@dataclass
+@flax.struct.dataclass
 class FlaxSchedulerOutput(SchedulerOutput):
     state: DDIMSchedulerState
 
