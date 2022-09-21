@@ -137,7 +137,6 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
 
         # get prompt text embeddings
         text_embeddings = self.text_encoder(prompt_ids, params=params["text_encoder"], return_dict=False)[0]
-        jax.debug.print("text_embeddings {shape}", shape=text_embeddings.shape)
 
         # TODO: currently it is assumed `do_classifier_free_guidance = guidance_scale > 1.0`
         # implement this conditional `do_classifier_free_guidance = guidance_scale > 1.0`
@@ -147,9 +146,7 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
         uncond_input = self.tokenizer(
             [""] * batch_size, padding="max_length", max_length=max_length, return_tensors="np"
         )
-        jax.debug.print("uncond_input {shape}", shape=uncond_input.input_ids.shape)
         uncond_embeddings = self.text_encoder(uncond_input.input_ids, params=params["text_encoder"], return_dict=False)[0]
-        jax.debug.print("uncond_embeddings {shape}", shape=uncond_embeddings.shape)
         context = jnp.concatenate([uncond_embeddings, text_embeddings])
 
         # TODO: check it because the shape is different from Pytorhc StableDiffusionPipeline
@@ -216,7 +213,8 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
         #        )
         has_nsfw_concept = False
 
-        if not return_dict:
-            return (image, jnp.array(0))
+        # if not return_dict:
+            # return (image, jnp.array(0))
+        return image
 
-        return FlaxStableDiffusionPipelineOutput(images=image, nsfw_content_detected=jnp.array(0))
+        # return FlaxStableDiffusionPipelineOutput(images=image, nsfw_content_detected=jnp.array(0))
