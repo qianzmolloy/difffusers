@@ -215,4 +215,4 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
         if not return_dict:
             return (image, has_nsfw_concept)
 
-        return FlaxStableDiffusionPipelineOutput(images=image, nsfw_content_detected=None)
+        return FlaxStableDiffusionPipelineOutput(images=image, nsfw_content_detected=jnp.array(0))
