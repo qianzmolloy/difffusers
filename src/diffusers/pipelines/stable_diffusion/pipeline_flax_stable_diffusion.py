@@ -178,13 +178,14 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
                 jnp.array(latents_input),
                 jnp.array(timestep, dtype=jnp.int32),
                 encoder_hidden_states=context,
-            ).sample
+                return_dict=False,
+            )[0]
             # perform guidance
             noise_pred_uncond, noise_prediction_text = jnp.split(noise_pred, 2, axis=0)
             noise_pred = noise_pred_uncond + guidance_scale * (noise_prediction_text - noise_pred_uncond)
 
             # compute the previous noisy sample x_t -> x_t-1
-            latents, scheduler_state = self.scheduler.step(scheduler_state, noise_pred, t, latents).to_tuple()
+            latents, scheduler_state = self.scheduler.step(scheduler_state, noise_pred, t, latents, return_dict=False)
             return latents, scheduler_state
 
         scheduler_state = self.scheduler.set_timesteps(params["scheduler"], num_inference_steps=num_inference_steps)
