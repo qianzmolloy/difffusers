@@ -135,7 +135,7 @@ class FlaxDDIMScheduler(SchedulerMixin, ConfigMixin):
         # For the final step, there is no previous alphas_cumprod because we are already at 0
         # `set_alpha_to_one` decides whether we set this parameter simply to one or
         # whether we use the final alpha of the "non-previous" one.
-        self.final_alpha_cumprod = jnp.array(1.0) if set_alpha_to_one else float(self._alphas_cumprod[0])
+        self.final_alpha_cumprod = jnp.array(1.0) if set_alpha_to_one else self._alphas_cumprod[0]
 
     def create_state(self):
         return DDIMSchedulerState.create(
