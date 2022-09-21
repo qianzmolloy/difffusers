@@ -76,11 +76,18 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
             truncation=True,
             return_tensors="np",
         )
-        return text_input.input_ids
+        batch_size = text_input.input_ids.shape[0]
+
+        max_length = text_input.input_ids.shape[-1]
+        uncond_input = self.tokenizer(
+            [""] * batch_size, padding="max_length", max_length=max_length, return_tensors="np"
+        )
+        return text_input.input_ids, uncond_input.input_ids
 
     def __call__(
         self,
         prompt_ids: jnp.array,
+        uncond_prompt_ids: jnp.array,
         params: Union[Dict, FrozenDict],
         prng_seed: jax.random.PRNGKey,
         num_inference_steps: Optional[int] = 50,
@@ -142,11 +149,11 @@ class FlaxStableDiffusionPipeline(FlaxDiffusionPipeline):
         # implement this conditional `do_classifier_free_guidance = guidance_scale > 1.0`
         batch_size = prompt_ids.shape[0]
 
-        max_length = prompt_ids.shape[-1]
-        uncond_input = self.tokenizer(
-            [""] * batch_size, padding="max_length", max_length=max_length, return_tensors="np"
-        )
-        uncond_embeddings = self.text_encoder(uncond_input.input_ids, params=params["text_encoder"], return_dict=False)[0]
+        # max_length = prompt_ids.shape[-1]
+        # uncond_input = self.tokenizer(
+            # [""] * batch_size, padding="max_length", max_length=max_length, return_tensors="np"
+        # )
+        uncond_embeddings = self.text_encoder(uncond_prompt_ids, params=params["text_encoder"], return_dict=False)[0]
         context = jnp.concatenate([uncond_embeddings, text_embeddings])
 
         # TODO: check it because the shape is different from Pytorhc StableDiffusionPipeline
