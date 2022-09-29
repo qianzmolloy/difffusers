@@ -334,7 +334,12 @@ class ResnetBlock2D(nn.Module):
         self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
 
         if temb_channels is not None:
-            self.time_emb_proj = torch.nn.Linear(temb_channels, out_channels)
+            if time_embedding_norm == "default":
+                self.time_emb_proj = torch.nn.Linear(temb_channels, out_channels)
+            elif time_embedding_norm == "scale_shift":
+                self.temb_proj = torch.nn.Linear(temb_channels, 2 * out_channels)
+            else:
+                self.time_emb_proj = torch.nn.Linear(temb_channels, out_channels)
         else:
             self.time_emb_proj = None
 
@@ -394,9 +399,19 @@ class ResnetBlock2D(nn.Module):
 
         if temb is not None:
             temb = self.time_emb_proj(self.nonlinearity(temb))[:, :, None, None]
-            hidden_states = hidden_states + temb
+        else:
+            temb = 0
 
-        hidden_states = self.norm2(hidden_states)
+        if self.time_embedding_norm == "scale_shift":
+            scale, shift = torch.chunk(temb, 2, dim=1)
+            hidden_states = self.norm2(hidden_states).type(hidden_states.dtype)
+            hidden_states = hidden_states * (1 + scale) + shift
+        elif self.time_embedding_norm == "default":
+            hidden_states = hidden_states + temb
+            # make sure hidden states is in float32
+            # when running in half-precision
+            hidden_states = self.norm2(hidden_states).type(hidden_states.dtype)
+
         hidden_states = self.nonlinearity(hidden_states)
 
         hidden_states = self.dropout(hidden_states)

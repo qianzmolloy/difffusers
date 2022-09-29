@@ -88,6 +88,8 @@ class UNet2DModel(ModelMixin, ConfigMixin):
         attention_head_dim: int = 8,
         norm_num_groups: int = 32,
         norm_eps: float = 1e-5,
+        resnet_time_scale_shift: str = "default",
+        resblock_updown=False,
     ):
         super().__init__()
 
@@ -130,6 +132,8 @@ class UNet2DModel(ModelMixin, ConfigMixin):
                 resnet_groups=norm_num_groups,
                 attn_num_head_channels=attention_head_dim,
                 downsample_padding=downsample_padding,
+                resnet_time_scale_shift=resnet_time_scale_shift,
+                resblock_updown=resblock_updown,
             )
             self.down_blocks.append(down_block)
 
@@ -140,7 +144,7 @@ class UNet2DModel(ModelMixin, ConfigMixin):
             resnet_eps=norm_eps,
             resnet_act_fn=act_fn,
             output_scale_factor=mid_block_scale_factor,
-            resnet_time_scale_shift="default",
+            resnet_time_scale_shift=resnet_time_scale_shift,
             attn_num_head_channels=attention_head_dim,
             resnet_groups=norm_num_groups,
         )
