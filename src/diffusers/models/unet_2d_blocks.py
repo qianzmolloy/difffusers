@@ -1057,6 +1057,7 @@ class GuidedDiffusionDownBlock2D(nn.Module):
                 non_linearity=resnet_act_fn,
                 output_scale_factor=output_scale_factor,
                 pre_norm=resnet_pre_norm,
+                down=True,
             )
 
             self.downsamplers = nn.ModuleList([downsampler])
