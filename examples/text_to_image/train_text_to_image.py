@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import logging
 import math
 import os
@@ -18,6 +19,7 @@ from datasets import load_dataset
 from diffusers import AutoencoderKL, DDPMScheduler, PNDMScheduler, StableDiffusionPipeline, UNet2DConditionModel
 from diffusers.optimization import get_scheduler
 from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
+from diffusers.utils.import_utils import is_xformers_available
 from huggingface_hub import HfFolder, Repository, whoami
 from torchvision import transforms
 from tqdm.auto import tqdm
@@ -31,6 +33,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument(
         "--pretrained_model_name_or_path",
+        type=str,
+        default=None,
+        required=True,
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+    )
+    parser.add_argument(
+        "--non_ema_pretrained_model_name_or_path",
         type=str,
         default=None,
         required=True,
@@ -112,6 +121,7 @@ def parse_args():
         action="store_true",
         help="whether to randomly flip images horizontally",
     )
+    parser.add_argument("--train_text_encoder", action="store_true", help="Whether to train the text encoder")
     parser.add_argument(
         "--train_batch_size", type=int, default=16, help="Batch size (per device) for the training dataloader."
     )
@@ -338,11 +348,20 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer")
     text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder")
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae")
-    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet")
+    unet = UNet2DConditionModel.from_pretrained(args.non_ema_pretrained_model_name_or_path, subfolder="unet")
+    ema_unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet")
+
+    if is_xformers_available():
+        unet.set_use_memory_efficient_attention_xformers(True)
+
+    # Create EMA for the unet.
+    if args.use_ema:
+        ema_unet = EMAModel(ema_unet.parameters())
 
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
+    if not args.train_text_encoder:
+        text_encoder.requires_grad_(False)
 
     if args.gradient_checkpointing:
         unet.enable_gradient_checkpointing()
@@ -365,8 +384,12 @@ def main():
     else:
         optimizer_cls = torch.optim.AdamW
 
+    params_to_optimize = (
+        itertools.chain(unet.parameters(), text_encoder.parameters()) if args.train_text_encoder else unet.parameters()
+    )
+
     optimizer = optimizer_cls(
-        unet.parameters(),
+        params_to_optimize,
         lr=args.learning_rate,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
@@ -491,9 +514,14 @@ def main():
         num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
-    unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        unet, optimizer, train_dataloader, lr_scheduler
-    )
+    if args.train_text_encoder:
+        unet, text_encoder, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+            unet, text_encoder, optimizer, train_dataloader, lr_scheduler
+        )
+    else:
+        unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+            unet, optimizer, train_dataloader, lr_scheduler
+        )
 
     weight_dtype = torch.float32
     if args.mixed_precision == "fp16":
@@ -504,12 +532,10 @@ def main():
     # Move text_encode and vae to gpu.
     # For mixed precision training we cast the text_encoder and vae weights to half-precision
     # as these models are only used for inference, keeping weights in full precision is not required.
-    text_encoder.to(accelerator.device, dtype=weight_dtype)
     vae.to(accelerator.device, dtype=weight_dtype)
-
-    # Create EMA for the unet.
-    if args.use_ema:
-        ema_unet = EMAModel(unet.parameters())
+    if not args.train_text_encoder:
+        text_encoder.to(accelerator.device, dtype=weight_dtype)
+    ema_unet.to(accelerator.device)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
@@ -541,6 +567,8 @@ def main():
 
     for epoch in range(args.num_train_epochs):
         unet.train()
+        if args.train_text_encoder:
+            text_encoder.train()
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(unet):
@@ -597,6 +625,8 @@ def main():
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
         unet = accelerator.unwrap_model(unet)
+        text_encoder = (accelerator.unwrap_model(text_encoder),)
+
         if args.use_ema:
             ema_unet.copy_to(unet.parameters())
 
