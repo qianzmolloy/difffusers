@@ -27,6 +27,7 @@ from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 
 
 logger = get_logger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def parse_args():
@@ -131,6 +132,12 @@ def parse_args():
         type=int,
         default=None,
         help="Total number of training steps to perform.  If provided, overrides num_train_epochs.",
+    )
+    parser.add_argument(
+        "--save_steps",
+        type=int,
+        default=1000,
+        help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
     )
     parser.add_argument(
         "--gradient_accumulation_steps",
@@ -253,6 +260,8 @@ class EMAModel:
         parameters = list(parameters)
         self.shadow_params = [p.clone().detach() for p in parameters]
 
+        self.collected_params = None
+
         self.decay = decay
         self.optimization_step = 0
 
@@ -277,6 +286,39 @@ class EMAModel:
             else:
                 s_param.copy_(param)
 
+        torch.cuda.empty_cache()
+
+    def store(self, parameters: Iterable[torch.nn.Parameter]) -> None:
+        """
+        Save the current parameters for restoring later.
+        Args:
+            parameters: Iterable of `torch.nn.Parameter`; the parameters to be
+                temporarily stored. If `None`, the parameters of with which this
+                `ExponentialMovingAverage` was initialized will be used.
+        """
+        parameters = list(parameters)
+        self.collected_params = [param.clone() for param in parameters]
+
+    def restore(self, parameters: Iterable[torch.nn.Parameter]) -> None:
+        """
+        Restore the parameters stored with the `store` method.
+        Useful to validate the model with EMA parameters without affecting the
+        original optimization process. Store the parameters before the
+        `copy_to` method. After validation (or model saving), use this to
+        restore the former parameters.
+        Args:
+            parameters: Iterable of `torch.nn.Parameter`; the parameters to be
+                updated with the stored parameters. If `None`, the
+                parameters with which this `ExponentialMovingAverage` was
+                initialized will be used.
+        """
+        if self.collected_params is None:
+            raise RuntimeError("This ExponentialMovingAverage has no `store()`ed weights to `restore()`")
+        parameters = list(parameters)
+        for c_param, param in zip(self.collected_params, parameters):
+            param.data.copy_(c_param.data)
+
+        self.collected_params = None
         torch.cuda.empty_cache()
 
     def copy_to(self, parameters: Iterable[torch.nn.Parameter]) -> None:
@@ -365,6 +407,8 @@ def main():
 
     if args.gradient_checkpointing:
         unet.enable_gradient_checkpointing()
+        if args.train_text_encoder:
+            text_encoder.gradient_checkpointing_enable()
 
     if args.scale_lr:
         args.learning_rate = (
@@ -450,10 +494,11 @@ def main():
         captions = []
         for caption in examples[caption_column]:
             if isinstance(caption, str):
-                captions.append(caption)
+                captions.append(f"{caption} emoji")
             elif isinstance(caption, (list, np.ndarray)):
                 # take a random caption if there are multiple
-                captions.append(random.choice(caption) if is_train else caption[0])
+                caption = random.choice(caption) if is_train else caption[0]
+                captions.append(f"{caption} emoji")
             else:
                 raise ValueError(
                     f"Caption column `{caption_column}` should contain either strings or lists of strings."
@@ -489,7 +534,9 @@ def main():
         pixel_values = torch.stack([example["pixel_values"] for example in examples])
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
         input_ids = [example["input_ids"] for example in examples]
-        padded_tokens = tokenizer.pad({"input_ids": input_ids}, padding=True, return_tensors="pt")
+        padded_tokens = tokenizer.pad(
+            {"input_ids": input_ids}, padding="max_length", max_length=77, return_tensors="pt"
+        )
         return {
             "pixel_values": pixel_values,
             "input_ids": padded_tokens.input_ids,
@@ -522,6 +569,32 @@ def main():
         unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
             unet, optimizer, train_dataloader, lr_scheduler
         )
+
+    def save_checkpoint(unet, ema_unet, text_encoder, vae, step, is_final=False):
+        unet = accelerator.unwrap_model(unet)
+        if args.use_ema:
+            ema_unet.store(unet.parameters())
+            ema_unet.copy_to(unet.parameters())
+
+        pipeline = StableDiffusionPipeline(
+            text_encoder=accelerator.unwrap_model(text_encoder),
+            vae=vae,
+            unet=unet,
+            tokenizer=tokenizer,
+            scheduler=PNDMScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler"),
+            safety_checker=None,
+            feature_extractor=CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch32"),
+        )
+
+        if is_final:
+            pipeline.save_pretrained(args.output_dir)
+            if args.push_to_hub:
+                repo.push_to_hub(commit_message="End of training", blocking=False, auto_lfs_prune=True)
+        else:
+            save_path = os.path.join(args.output_dir, f"checkpoint-{step}")
+            pipeline.save_pretrained(save_path)
+            if args.use_ema:
+                ema_unet.restore(unet.parameters())
 
     weight_dtype = torch.float32
     if args.mixed_precision == "fp16":
@@ -618,31 +691,17 @@ def main():
             logs = {"step_loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
 
+            if global_step % args.save_steps == 0 and accelerator.is_main_process:
+                accelerator.wait_for_everyone()
+                save_checkpoint(unet, ema_unet, text_encoder, vae, step=global_step)
+
             if global_step >= args.max_train_steps:
                 break
 
     # Create the pipeline using the trained modules and save it.
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
-        unet = accelerator.unwrap_model(unet)
-        text_encoder = (accelerator.unwrap_model(text_encoder),)
-
-        if args.use_ema:
-            ema_unet.copy_to(unet.parameters())
-
-        pipeline = StableDiffusionPipeline(
-            text_encoder=text_encoder,
-            vae=vae,
-            unet=unet,
-            tokenizer=tokenizer,
-            scheduler=PNDMScheduler.from_config("CompVis/stable-diffusion-v1-4", subfolder="scheduler"),
-            safety_checker=StableDiffusionSafetyChecker.from_pretrained("CompVis/stable-diffusion-safety-checker"),
-            feature_extractor=CLIPFeatureExtractor.from_pretrained("openai/clip-vit-base-patch32"),
-        )
-        pipeline.save_pretrained(args.output_dir)
-
-        if args.push_to_hub:
-            repo.push_to_hub(commit_message="End of training", blocking=False, auto_lfs_prune=True)
+        save_checkpoint(unet, ema_unet, text_encoder, vae, step=global_step, is_final=True)
 
     accelerator.end_training()
 
